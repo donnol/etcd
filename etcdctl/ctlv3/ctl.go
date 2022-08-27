@@ -16,9 +16,12 @@
 package ctlv3
 
 import (
+	"os"
 	"time"
 
-	"go.etcd.io/etcd/etcdctl/ctlv3/command"
+	"go.etcd.io/etcd/api/v3/version"
+	"go.etcd.io/etcd/etcdctl/v3/ctlv3/command"
+	"go.etcd.io/etcd/pkg/v3/cobrautl"
 
 	"github.com/spf13/cobra"
 )
@@ -51,6 +54,9 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&globalFlags.OutputFormat, "write-out", "w", "simple", "set the output format (fields, json, protobuf, simple, table)")
 	rootCmd.PersistentFlags().BoolVar(&globalFlags.IsHex, "hex", false, "print byte strings as hex encoded strings")
+	rootCmd.RegisterFlagCompletionFunc("write-out", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"fields", "json", "protobuf", "simple", "table"}, cobra.ShellCompDirectiveDefault
+	})
 
 	rootCmd.PersistentFlags().DurationVar(&globalFlags.DialTimeout, "dial-timeout", defaultDialTimeout, "dial timeout for client connections")
 	rootCmd.PersistentFlags().DurationVar(&globalFlags.CommandTimeOut, "command-timeout", defaultCommandTimeOut, "timeout for short running command (excluding dial timeout)")
@@ -60,7 +66,7 @@ func init() {
 	// TODO: secure by default when etcd enables secure gRPC by default.
 	rootCmd.PersistentFlags().BoolVar(&globalFlags.Insecure, "insecure-transport", true, "disable transport security for client connections")
 	rootCmd.PersistentFlags().BoolVar(&globalFlags.InsecureDiscovery, "insecure-discovery", true, "accept insecure SRV records describing cluster endpoints")
-	rootCmd.PersistentFlags().BoolVar(&globalFlags.InsecureSkipVerify, "insecure-skip-tls-verify", false, "skip server certificate verification")
+	rootCmd.PersistentFlags().BoolVar(&globalFlags.InsecureSkipVerify, "insecure-skip-tls-verify", false, "skip server certificate verification (CAUTION: this option should be enabled only for testing purposes)")
 	rootCmd.PersistentFlags().StringVar(&globalFlags.TLS.CertFile, "cert", "", "identify secure client using this TLS certificate file")
 	rootCmd.PersistentFlags().StringVar(&globalFlags.TLS.KeyFile, "key", "", "identify secure client using this TLS key file")
 	rootCmd.PersistentFlags().StringVar(&globalFlags.TLS.TrustedCAFile, "cacert", "", "verify certificates of TLS-enabled secure servers using this CA bundle")
@@ -85,14 +91,36 @@ func init() {
 		command.NewMemberCommand(),
 		command.NewSnapshotCommand(),
 		command.NewMakeMirrorCommand(),
-		command.NewMigrateCommand(),
 		command.NewLockCommand(),
 		command.NewElectCommand(),
 		command.NewAuthCommand(),
 		command.NewUserCommand(),
 		command.NewRoleCommand(),
 		command.NewCheckCommand(),
+		command.NewCompletionCommand(),
+		command.NewDowngradeCommand(),
 	)
+}
+
+func usageFunc(c *cobra.Command) error {
+	return cobrautl.UsageFunc(c, version.Version, version.APIVersion)
+}
+
+func Start() error {
+	rootCmd.SetUsageFunc(usageFunc)
+	// Make help just show the usage
+	rootCmd.SetHelpTemplate(`{{.UsageString}}`)
+	return rootCmd.Execute()
+}
+
+func MustStart() {
+	if err := Start(); err != nil {
+		if rootCmd.SilenceErrors {
+			cobrautl.ExitWithError(cobrautl.ExitError, err)
+		} else {
+			os.Exit(cobrautl.ExitError)
+		}
+	}
 }
 
 func init() {

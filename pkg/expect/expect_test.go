@@ -17,18 +17,21 @@
 package expect
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestExpectFunc(t *testing.T) {
-	ep, err := NewExpect("/bin/echo", "hello world")
+	ep, err := NewExpect("echo", "hello world")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wstr := "hello world\r\n"
-	l, eerr := ep.ExpectFunc(func(a string) bool { return len(a) > 10 })
+	l, eerr := ep.ExpectFunc(context.Background(), func(a string) bool { return len(a) > 10 })
 	if eerr != nil {
 		t.Fatal(eerr)
 	}
@@ -40,8 +43,35 @@ func TestExpectFunc(t *testing.T) {
 	}
 }
 
+func TestExpectFuncTimeout(t *testing.T) {
+	ep, err := NewExpect("tail", "-f", "/dev/null")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		// It's enough to have "talkative" process to stuck in the infinite loop of reading
+		for {
+			err := ep.Send("new line\n")
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_, err = ep.ExpectFunc(ctx, func(a string) bool { return false })
+
+	require.ErrorAs(t, err, &context.DeadlineExceeded)
+
+	if err = ep.Stop(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEcho(t *testing.T) {
-	ep, err := NewExpect("/bin/echo", "hello world")
+	ep, err := NewExpect("echo", "hello world")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +92,7 @@ func TestEcho(t *testing.T) {
 }
 
 func TestLineCount(t *testing.T) {
-	ep, err := NewExpect("/usr/bin/printf", "1\n2\n3")
+	ep, err := NewExpect("printf", "1\n2\n3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +113,7 @@ func TestLineCount(t *testing.T) {
 }
 
 func TestSend(t *testing.T) {
-	ep, err := NewExpect("/usr/bin/tr", "a", "b")
+	ep, err := NewExpect("tr", "a", "b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +129,7 @@ func TestSend(t *testing.T) {
 }
 
 func TestSignal(t *testing.T) {
-	ep, err := NewExpect("/bin/sleep", "100")
+	ep, err := NewExpect("sleep", "100")
 	if err != nil {
 		t.Fatal(err)
 	}

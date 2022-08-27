@@ -19,10 +19,13 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"go.etcd.io/etcd/lease/leasepb"
-	"go.etcd.io/etcd/mvcc"
-	"go.etcd.io/etcd/mvcc/backend"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/authpb"
+	"go.etcd.io/etcd/server/v3/storage/schema"
+	"go.uber.org/zap"
+
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/server/v3/lease/leasepb"
+	"go.etcd.io/etcd/server/v3/storage/backend"
 
 	bolt "go.etcd.io/bbolt"
 )
@@ -51,9 +54,14 @@ func getBuckets(dbPath string) (buckets []string, err error) {
 
 type decoder func(k, v []byte)
 
+// key is the bucket name, and value is the function to decode K/V in the bucket.
 var decoders = map[string]decoder{
-	"key":   keyDecoder,
-	"lease": leaseDecoder,
+	"key":       keyDecoder,
+	"lease":     leaseDecoder,
+	"auth":      authDecoder,
+	"authRoles": authRolesDecoder,
+	"authUsers": authUsersDecoder,
+	"meta":      metaDecoder,
 }
 
 type revision struct {
@@ -66,6 +74,10 @@ func bytesToRev(bytes []byte) revision {
 		main: int64(binary.BigEndian.Uint64(bytes[0:8])),
 		sub:  int64(binary.BigEndian.Uint64(bytes[9:])),
 	}
+}
+
+func defaultDecoder(k, v []byte) {
+	fmt.Printf("key=%q, value=%q\n", k, v)
 }
 
 func keyDecoder(k, v []byte) {
@@ -90,7 +102,42 @@ func leaseDecoder(k, v []byte) {
 	if err := lpb.Unmarshal(v); err != nil {
 		panic(err)
 	}
-	fmt.Printf("lease ID=%016x, TTL=%ds\n", leaseID, lpb.TTL)
+	fmt.Printf("lease ID=%016x, TTL=%ds, remaining TTL=%ds\n", leaseID, lpb.TTL, lpb.RemainingTTL)
+}
+
+func authDecoder(k, v []byte) {
+	if string(k) == "authRevision" {
+		rev := binary.BigEndian.Uint64(v)
+		fmt.Printf("key=%q, value=%v\n", k, rev)
+	} else {
+		fmt.Printf("key=%q, value=%v\n", k, v)
+	}
+}
+
+func authRolesDecoder(k, v []byte) {
+	role := &authpb.Role{}
+	err := role.Unmarshal(v)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("role=%q, keyPermission=%v\n", string(role.Name), role.KeyPermission)
+}
+
+func authUsersDecoder(k, v []byte) {
+	user := &authpb.User{}
+	err := user.Unmarshal(v)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("user=%q, roles=%q, option=%v\n", user.Name, user.Roles, user.Options)
+}
+
+func metaDecoder(k, v []byte) {
+	if string(k) == string(schema.MetaConsistentIndexKeyName) || string(k) == string(schema.MetaTermKeyName) {
+		fmt.Printf("key=%q, value=%v\n", k, binary.BigEndian.Uint64(v))
+	} else {
+		defaultDecoder(k, v)
+	}
 }
 
 func iterateBucket(dbPath, bucket string, limit uint64, decode bool) (err error) {
@@ -115,7 +162,7 @@ func iterateBucket(dbPath, bucket string, limit uint64, decode bool) (err error)
 			if dec, ok := decoders[bucket]; decode && ok {
 				dec(k, v)
 			} else {
-				fmt.Printf("key=%q, value=%q\n", k, v)
+				defaultDecoder(k, v)
 			}
 
 			limit--
@@ -130,8 +177,8 @@ func iterateBucket(dbPath, bucket string, limit uint64, decode bool) (err error)
 }
 
 func getHash(dbPath string) (hash uint32, err error) {
-	b := backend.NewDefaultBackend(dbPath)
-	return b.Hash(mvcc.DefaultIgnores)
+	b := backend.NewDefaultBackend(zap.NewNop(), dbPath)
+	return b.Hash(schema.DefaultIgnores)
 }
 
 // TODO: revert by revision and find specified hash value

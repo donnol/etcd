@@ -15,19 +15,17 @@
 package e2e
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"go.etcd.io/etcd/pkg/expect"
+	"go.etcd.io/etcd/pkg/v3/expect"
+	"go.etcd.io/etcd/tests/v3/framework/e2e"
 )
 
 func TestCtlV3Elect(t *testing.T) {
-	oldenv := os.Getenv("EXPECT_DEBUG")
-	defer os.Setenv("EXPECT_DEBUG", oldenv)
-	os.Setenv("EXPECT_DEBUG", "1")
-
 	testCtl(t, testElect)
 }
 
@@ -76,7 +74,7 @@ func testElect(cx ctlCtx) {
 	if err = blocked.Signal(os.Interrupt); err != nil {
 		cx.t.Fatal(err)
 	}
-	if err = closeWithTimeout(blocked, time.Second); err != nil {
+	if err = e2e.CloseWithTimeout(blocked, time.Second); err != nil {
 		cx.t.Fatal(err)
 	}
 
@@ -84,7 +82,7 @@ func testElect(cx ctlCtx) {
 	if err = holder.Signal(os.Interrupt); err != nil {
 		cx.t.Fatal(err)
 	}
-	if err = closeWithTimeout(holder, time.Second); err != nil {
+	if err = e2e.CloseWithTimeout(holder, time.Second); err != nil {
 		cx.t.Fatal(err)
 	}
 
@@ -102,14 +100,14 @@ func testElect(cx ctlCtx) {
 // ctlV3Elect creates a elect process with a channel listening for when it wins the election.
 func ctlV3Elect(cx ctlCtx, name, proposal string) (*expect.ExpectProcess, <-chan string, error) {
 	cmdArgs := append(cx.PrefixArgs(), "elect", name, proposal)
-	proc, err := spawnCmd(cmdArgs)
+	proc, err := e2e.SpawnCmd(cmdArgs, cx.envMap)
 	outc := make(chan string, 1)
 	if err != nil {
 		close(outc)
 		return proc, outc, err
 	}
 	go func() {
-		s, xerr := proc.ExpectFunc(func(string) bool { return true })
+		s, xerr := proc.ExpectFunc(context.TODO(), func(string) bool { return true })
 		if xerr != nil {
 			cx.t.Errorf("expect failed (%v)", xerr)
 		}

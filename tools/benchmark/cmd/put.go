@@ -24,13 +24,13 @@ import (
 	"strings"
 	"time"
 
-	v3 "go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/pkg/report"
+	v3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/pkg/v3/report"
 
+	"github.com/cheggaaa/pb/v3"
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
-	"gopkg.in/cheggaaa/pb.v1"
 )
 
 // putCmd represents the put command
@@ -86,7 +86,6 @@ func putFunc(cmd *cobra.Command, args []string) {
 	k, v := make([]byte, keySize), string(mustRandBytes(valSize))
 
 	bar = pb.New(putTotal)
-	bar.Format("Bom !")
 	bar.Start()
 
 	r := newReport()
@@ -171,7 +170,6 @@ func hashKV(cmd *cobra.Command, clients []*v3.Client) {
 	host := eps[0]
 
 	st := time.Now()
-	clients[0].HashKV(context.Background(), eps[0], 0)
 	rh, eh := clients[0].HashKV(context.Background(), host, 0)
 	if eh != nil {
 		fmt.Fprintf(os.Stderr, "Failed to get the hashkv of endpoint %s (%v)\n", host, eh)
@@ -183,7 +181,7 @@ func hashKV(cmd *cobra.Command, clients []*v3.Client) {
 		panic(err)
 	}
 
-	rs := "HaskKV Summary:\n"
+	rs := "HashKV Summary:\n"
 	rs += fmt.Sprintf("\tHashKV: %d\n", rh.Hash)
 	rs += fmt.Sprintf("\tEndpoint: %s\n", host)
 	rs += fmt.Sprintf("\tTime taken to get hashkv: %v\n", time.Since(st))

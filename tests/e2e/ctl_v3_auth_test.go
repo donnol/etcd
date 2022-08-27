@@ -15,40 +15,48 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/framework/e2e"
 )
 
-func TestCtlV3AuthEnable(t *testing.T)              { testCtl(t, authEnableTest) }
+func TestCtlV3AuthEnable(t *testing.T) {
+	testCtl(t, authEnableTest)
+}
 func TestCtlV3AuthDisable(t *testing.T)             { testCtl(t, authDisableTest) }
+func TestCtlV3AuthGracefulDisable(t *testing.T)     { testCtl(t, authGracefulDisableTest) }
+func TestCtlV3AuthStatus(t *testing.T)              { testCtl(t, authStatusTest) }
 func TestCtlV3AuthWriteKey(t *testing.T)            { testCtl(t, authCredWriteKeyTest) }
 func TestCtlV3AuthRoleUpdate(t *testing.T)          { testCtl(t, authRoleUpdateTest) }
 func TestCtlV3AuthUserDeleteDuringOps(t *testing.T) { testCtl(t, authUserDeleteDuringOpsTest) }
 func TestCtlV3AuthRoleRevokeDuringOps(t *testing.T) { testCtl(t, authRoleRevokeDuringOpsTest) }
 func TestCtlV3AuthTxn(t *testing.T)                 { testCtl(t, authTestTxn) }
-func TestCtlV3AuthTxnJWT(t *testing.T)              { testCtl(t, authTestTxn, withCfg(configJWT)) }
+func TestCtlV3AuthTxnJWT(t *testing.T)              { testCtl(t, authTestTxn, withCfg(*e2e.NewConfigJWT())) }
 func TestCtlV3AuthPrefixPerm(t *testing.T)          { testCtl(t, authTestPrefixPerm) }
 func TestCtlV3AuthMemberAdd(t *testing.T)           { testCtl(t, authTestMemberAdd) }
 func TestCtlV3AuthMemberRemove(t *testing.T) {
 	testCtl(t, authTestMemberRemove, withQuorum(), withNoStrictReconfig())
 }
 func TestCtlV3AuthMemberUpdate(t *testing.T)     { testCtl(t, authTestMemberUpdate) }
-func TestCtlV3AuthCertCN(t *testing.T)           { testCtl(t, authTestCertCN, withCfg(configClientTLSCertAuth)) }
 func TestCtlV3AuthRevokeWithDelete(t *testing.T) { testCtl(t, authTestRevokeWithDelete) }
 func TestCtlV3AuthInvalidMgmt(t *testing.T)      { testCtl(t, authTestInvalidMgmt) }
 func TestCtlV3AuthFromKeyPerm(t *testing.T)      { testCtl(t, authTestFromKeyPerm) }
 func TestCtlV3AuthAndWatch(t *testing.T)         { testCtl(t, authTestWatch) }
-func TestCtlV3AuthAndWatchJWT(t *testing.T)      { testCtl(t, authTestWatch, withCfg(configJWT)) }
+func TestCtlV3AuthAndWatchJWT(t *testing.T)      { testCtl(t, authTestWatch, withCfg(*e2e.NewConfigJWT())) }
 
-func TestCtlV3AuthLeaseTestKeepAlive(t *testing.T)         { testCtl(t, authLeaseTestKeepAlive) }
-func TestCtlV3AuthLeaseTestTimeToLiveExpired(t *testing.T) { testCtl(t, authLeaseTestTimeToLiveExpired) }
-func TestCtlV3AuthLeaseGrantLeases(t *testing.T)           { testCtl(t, authLeaseTestLeaseGrantLeases) }
+func TestCtlV3AuthLeaseTestKeepAlive(t *testing.T) { testCtl(t, authLeaseTestKeepAlive) }
+func TestCtlV3AuthLeaseTestTimeToLiveExpired(t *testing.T) {
+	testCtl(t, authLeaseTestTimeToLiveExpired)
+}
+func TestCtlV3AuthLeaseGrantLeases(t *testing.T) { testCtl(t, authLeaseTestLeaseGrantLeases) }
 func TestCtlV3AuthLeaseGrantLeasesJWT(t *testing.T) {
-	testCtl(t, authLeaseTestLeaseGrantLeases, withCfg(configJWT))
+	testCtl(t, authLeaseTestLeaseGrantLeases, withCfg(*e2e.NewConfigJWT()))
 }
 func TestCtlV3AuthLeaseRevoke(t *testing.T) { testCtl(t, authLeaseTestLeaseRevoke) }
 
@@ -60,15 +68,16 @@ func TestCtlV3AuthDefrag(t *testing.T) { testCtl(t, authTestDefrag) }
 func TestCtlV3AuthEndpointHealth(t *testing.T) {
 	testCtl(t, authTestEndpointHealth, withQuorum())
 }
-func TestCtlV3AuthSnapshot(t *testing.T)    { testCtl(t, authTestSnapshot) }
-func TestCtlV3AuthSnapshotJWT(t *testing.T) { testCtl(t, authTestSnapshot, withCfg(configJWT)) }
-func TestCtlV3AuthCertCNAndUsername(t *testing.T) {
-	testCtl(t, authTestCertCNAndUsername, withCfg(configClientTLSCertAuth))
+func TestCtlV3AuthSnapshot(t *testing.T) { testCtl(t, authTestSnapshot) }
+func TestCtlV3AuthSnapshotJWT(t *testing.T) {
+	testCtl(t, authTestSnapshot, withCfg(*e2e.NewConfigJWT()))
 }
-func TestCtlV3AuthJWTExpire(t *testing.T) { testCtl(t, authTestJWTExpire, withCfg(configJWT)) }
-func TestCtlV3AuthCertCNAndUsernameNoPassword(t *testing.T) {
-	testCtl(t, authTestCertCNAndUsernameNoPassword, withCfg(configClientTLSCertAuth))
+func TestCtlV3AuthJWTExpire(t *testing.T) {
+	testCtl(t, authTestJWTExpire, withCfg(*e2e.NewConfigJWT()))
 }
+func TestCtlV3AuthRevisionConsistency(t *testing.T) { testCtl(t, authTestRevisionConsistency) }
+
+func TestCtlV3AuthTestCacheReload(t *testing.T) { testCtl(t, authTestCacheReload) }
 
 func authEnableTest(cx ctlCtx) {
 	if err := authEnable(cx); err != nil {
@@ -92,7 +101,7 @@ func authEnable(cx ctlCtx) error {
 
 func ctlV3AuthEnable(cx ctlCtx) error {
 	cmdArgs := append(cx.PrefixArgs(), "auth", "enable")
-	return spawnWithExpect(cmdArgs, "Authentication Enabled")
+	return e2e.SpawnWithExpectWithEnv(cmdArgs, cx.envMap, "Authentication Enabled")
 }
 
 func authDisableTest(cx ctlCtx) {
@@ -136,9 +145,79 @@ func authDisableTest(cx ctlCtx) {
 	}
 }
 
+func authGracefulDisableTest(cx ctlCtx) {
+	if err := authEnable(cx); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	cx.user, cx.pass = "root", "root"
+
+	donec := make(chan struct{})
+
+	go func() {
+		defer close(donec)
+
+		// sleep a bit to let the watcher connects while auth is still enabled
+		time.Sleep(1000 * time.Millisecond)
+
+		// now disable auth...
+		if err := ctlV3AuthDisable(cx); err != nil {
+			cx.t.Fatalf("authGracefulDisableTest ctlV3AuthDisable error (%v)", err)
+		}
+
+		// ...and restart the node
+		node0 := cx.epc.Procs[0]
+		node0.WithStopSignal(syscall.SIGINT)
+		if rerr := node0.Restart(); rerr != nil {
+			cx.t.Fatal(rerr)
+		}
+
+		// the watcher should still work after reconnecting
+		if perr := ctlV3Put(cx, "key", "value", ""); perr != nil {
+			cx.t.Errorf("authGracefulDisableTest ctlV3Put error (%v)", perr)
+		}
+	}()
+
+	err := ctlV3Watch(cx, []string{"key"}, kvExec{key: "key", val: "value"})
+
+	if err != nil {
+		if cx.dialTimeout > 0 && !isGRPCTimedout(err) {
+			cx.t.Errorf("authGracefulDisableTest ctlV3Watch error (%v)", err)
+		}
+	}
+
+	<-donec
+}
+
 func ctlV3AuthDisable(cx ctlCtx) error {
 	cmdArgs := append(cx.PrefixArgs(), "auth", "disable")
-	return spawnWithExpect(cmdArgs, "Authentication Disabled")
+	return e2e.SpawnWithExpectWithEnv(cmdArgs, cx.envMap, "Authentication Disabled")
+}
+
+func authStatusTest(cx ctlCtx) {
+	cmdArgs := append(cx.PrefixArgs(), "auth", "status")
+	if err := e2e.SpawnWithExpects(cmdArgs, cx.envMap, "Authentication Status: false", "AuthRevision:"); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	if err := authEnable(cx); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	cx.user, cx.pass = "root", "root"
+	cmdArgs = append(cx.PrefixArgs(), "auth", "status")
+
+	if err := e2e.SpawnWithExpects(cmdArgs, cx.envMap, "Authentication Status: true", "AuthRevision:"); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	cmdArgs = append(cx.PrefixArgs(), "auth", "status", "--write-out", "json")
+	if err := e2e.SpawnWithExpectWithEnv(cmdArgs, cx.envMap, "enabled"); err != nil {
+		cx.t.Fatal(err)
+	}
+	if err := e2e.SpawnWithExpectWithEnv(cmdArgs, cx.envMap, "authRevision"); err != nil {
+		cx.t.Fatal(err)
+	}
 }
 
 func authCredWriteKeyTest(cx ctlCtx) {
@@ -354,25 +433,25 @@ func authRoleRevokeDuringOpsTest(cx ctlCtx) {
 }
 
 func ctlV3PutFailAuth(cx ctlCtx, key, val string) error {
-	return spawnWithExpect(append(cx.PrefixArgs(), "put", key, val), "authentication failed")
+	return e2e.SpawnWithExpectWithEnv(append(cx.PrefixArgs(), "put", key, val), cx.envMap, "authentication failed")
 }
 
 func ctlV3PutFailPerm(cx ctlCtx, key, val string) error {
-	return spawnWithExpect(append(cx.PrefixArgs(), "put", key, val), "permission denied")
+	return e2e.SpawnWithExpectWithEnv(append(cx.PrefixArgs(), "put", key, val), cx.envMap, "permission denied")
 }
 
 func authSetupTestUser(cx ctlCtx) {
 	if err := ctlV3User(cx, []string{"add", "test-user", "--interactive=false"}, "User test-user created", []string{"pass"}); err != nil {
 		cx.t.Fatal(err)
 	}
-	if err := spawnWithExpect(append(cx.PrefixArgs(), "role", "add", "test-role"), "Role test-role created"); err != nil {
+	if err := e2e.SpawnWithExpectWithEnv(append(cx.PrefixArgs(), "role", "add", "test-role"), cx.envMap, "Role test-role created"); err != nil {
 		cx.t.Fatal(err)
 	}
 	if err := ctlV3User(cx, []string{"grant-role", "test-user", "test-role"}, "Role test-role is granted to user test-user", nil); err != nil {
 		cx.t.Fatal(err)
 	}
 	cmd := append(cx.PrefixArgs(), "role", "grant-permission", "test-role", "readwrite", "foo")
-	if err := spawnWithExpect(cmd, "Role test-role updated"); err != nil {
+	if err := e2e.SpawnWithExpectWithEnv(cmd, cx.envMap, "Role test-role updated"); err != nil {
 		cx.t.Fatal(err)
 	}
 }
@@ -510,7 +589,7 @@ func authTestMemberAdd(cx ctlCtx) {
 	cx.user, cx.pass = "root", "root"
 	authSetupTestUser(cx)
 
-	peerURL := fmt.Sprintf("http://localhost:%d", etcdProcessBasePort+11)
+	peerURL := fmt.Sprintf("http://localhost:%d", e2e.EtcdProcessBasePort+11)
 	// ordinary user cannot add a new member
 	cx.user, cx.pass = "test-user", "pass"
 	if err := ctlV3MemberAdd(cx, peerURL, false); err == nil {
@@ -562,7 +641,7 @@ func authTestMemberUpdate(cx ctlCtx) {
 
 	// ordinary user cannot update a member
 	cx.user, cx.pass = "test-user", "pass"
-	peerURL := fmt.Sprintf("http://localhost:%d", etcdProcessBasePort+11)
+	peerURL := fmt.Sprintf("http://localhost:%d", e2e.EtcdProcessBasePort+11)
 	memberID := fmt.Sprintf("%x", mr.Members[0].ID)
 	if err = ctlV3MemberUpdate(cx, memberID, peerURL); err == nil {
 		cx.t.Fatalf("ordinary user must not be allowed to update a member")
@@ -584,7 +663,7 @@ func authTestCertCN(cx ctlCtx) {
 	if err := ctlV3User(cx, []string{"add", "example.com", "--interactive=false"}, "User example.com created", []string{""}); err != nil {
 		cx.t.Fatal(err)
 	}
-	if err := spawnWithExpect(append(cx.PrefixArgs(), "role", "add", "test-role"), "Role test-role created"); err != nil {
+	if err := e2e.SpawnWithExpectWithEnv(append(cx.PrefixArgs(), "role", "add", "test-role"), cx.envMap, "Role test-role created"); err != nil {
 		cx.t.Fatal(err)
 	}
 	if err := ctlV3User(cx, []string{"grant-role", "example.com", "test-role"}, "Role test-role is granted to user example.com", nil); err != nil {
@@ -776,6 +855,28 @@ func authLeaseTestTimeToLiveExpired(cx ctlCtx) {
 	}
 }
 
+func leaseTestTimeToLiveExpire(cx ctlCtx, ttl int) error {
+	leaseID, err := ctlV3LeaseGrant(cx, ttl)
+	if err != nil {
+		return fmt.Errorf("ctlV3LeaseGrant error (%v)", err)
+	}
+
+	if err = ctlV3Put(cx, "key", "val", leaseID); err != nil {
+		return fmt.Errorf("ctlV3Put error (%v)", err)
+	}
+	// eliminate false positive
+	time.Sleep(time.Duration(ttl+1) * time.Second)
+	cmdArgs := append(cx.PrefixArgs(), "lease", "timetolive", leaseID)
+	exp := fmt.Sprintf("lease %s already expired", leaseID)
+	if err = e2e.SpawnWithExpectWithEnv(cmdArgs, cx.envMap, exp); err != nil {
+		return fmt.Errorf("lease not properly expired: (%v)", err)
+	}
+	if err := ctlV3Get(cx, []string{"key"}); err != nil {
+		return fmt.Errorf("ctlV3Get error (%v)", err)
+	}
+	return nil
+}
+
 func authLeaseTestLeaseGrantLeases(cx ctlCtx) {
 	cx.user, cx.pass = "root", "root"
 	authSetupTestUser(cx)
@@ -783,6 +884,24 @@ func authLeaseTestLeaseGrantLeases(cx ctlCtx) {
 	if err := leaseTestGrantLeasesList(cx); err != nil {
 		cx.t.Fatalf("authLeaseTestLeaseGrantLeases: error (%v)", err)
 	}
+}
+
+func leaseTestGrantLeasesList(cx ctlCtx) error {
+	id, err := ctlV3LeaseGrant(cx, 10)
+	if err != nil {
+		return fmt.Errorf("ctlV3LeaseGrant error (%v)", err)
+	}
+
+	cmdArgs := append(cx.PrefixArgs(), "lease", "list")
+	proc, err := e2e.SpawnCmd(cmdArgs, cx.envMap)
+	if err != nil {
+		return fmt.Errorf("lease list failed (%v)", err)
+	}
+	_, err = proc.Expect(id)
+	if err != nil {
+		return fmt.Errorf("lease id not in returned list (%v)", err)
+	}
+	return proc.Close()
 }
 
 func authLeaseTestLeaseRevoke(cx ctlCtx) {
@@ -894,13 +1013,13 @@ func authTestRoleGet(cx ctlCtx) {
 		"KV Read:", "foo",
 		"KV Write:", "foo",
 	}
-	if err := spawnWithExpects(append(cx.PrefixArgs(), "role", "get", "test-role"), expected...); err != nil {
+	if err := e2e.SpawnWithExpects(append(cx.PrefixArgs(), "role", "get", "test-role"), cx.envMap, expected...); err != nil {
 		cx.t.Fatal(err)
 	}
 
 	// test-user can get the information of test-role because it belongs to the role
 	cx.user, cx.pass = "test-user", "pass"
-	if err := spawnWithExpects(append(cx.PrefixArgs(), "role", "get", "test-role"), expected...); err != nil {
+	if err := e2e.SpawnWithExpects(append(cx.PrefixArgs(), "role", "get", "test-role"), cx.envMap, expected...); err != nil {
 		cx.t.Fatal(err)
 	}
 
@@ -908,7 +1027,7 @@ func authTestRoleGet(cx ctlCtx) {
 	expected = []string{
 		"Error: etcdserver: permission denied",
 	}
-	if err := spawnWithExpects(append(cx.PrefixArgs(), "role", "get", "root"), expected...); err != nil {
+	if err := e2e.SpawnWithExpects(append(cx.PrefixArgs(), "role", "get", "root"), cx.envMap, expected...); err != nil {
 		cx.t.Fatal(err)
 	}
 }
@@ -925,13 +1044,13 @@ func authTestUserGet(cx ctlCtx) {
 		"Roles: test-role",
 	}
 
-	if err := spawnWithExpects(append(cx.PrefixArgs(), "user", "get", "test-user"), expected...); err != nil {
+	if err := e2e.SpawnWithExpects(append(cx.PrefixArgs(), "user", "get", "test-user"), cx.envMap, expected...); err != nil {
 		cx.t.Fatal(err)
 	}
 
 	// test-user can get the information of test-user itself
 	cx.user, cx.pass = "test-user", "pass"
-	if err := spawnWithExpects(append(cx.PrefixArgs(), "user", "get", "test-user"), expected...); err != nil {
+	if err := e2e.SpawnWithExpects(append(cx.PrefixArgs(), "user", "get", "test-user"), cx.envMap, expected...); err != nil {
 		cx.t.Fatal(err)
 	}
 
@@ -939,7 +1058,7 @@ func authTestUserGet(cx ctlCtx) {
 	expected = []string{
 		"Error: etcdserver: permission denied",
 	}
-	if err := spawnWithExpects(append(cx.PrefixArgs(), "user", "get", "root"), expected...); err != nil {
+	if err := e2e.SpawnWithExpects(append(cx.PrefixArgs(), "user", "get", "root"), cx.envMap, expected...); err != nil {
 		cx.t.Fatal(err)
 	}
 }
@@ -950,7 +1069,7 @@ func authTestRoleList(cx ctlCtx) {
 	}
 	cx.user, cx.pass = "root", "root"
 	authSetupTestUser(cx)
-	if err := spawnWithExpect(append(cx.PrefixArgs(), "role", "list"), "test-role"); err != nil {
+	if err := e2e.SpawnWithExpectWithEnv(append(cx.PrefixArgs(), "role", "list"), cx.envMap, "test-role"); err != nil {
 		cx.t.Fatal(err)
 	}
 }
@@ -967,13 +1086,13 @@ func authTestDefrag(cx ctlCtx) {
 
 	// ordinary user cannot defrag
 	cx.user, cx.pass = "test-user", "pass"
-	if err := ctlV3Defrag(cx); err == nil {
+	if err := ctlV3OnlineDefrag(cx); err == nil {
 		cx.t.Fatal("ordinary user should not be able to issue a defrag request")
 	}
 
 	// root can defrag
 	cx.user, cx.pass = "root", "root"
-	if err := ctlV3Defrag(cx); err != nil {
+	if err := ctlV3OnlineDefrag(cx); err != nil {
 		cx.t.Fatal(err)
 	}
 }
@@ -1061,7 +1180,7 @@ func certCNAndUsername(cx ctlCtx, noPassword bool) {
 			cx.t.Fatal(err)
 		}
 	}
-	if err := spawnWithExpect(append(cx.PrefixArgs(), "role", "add", "test-role-cn"), "Role test-role-cn created"); err != nil {
+	if err := e2e.SpawnWithExpectWithEnv(append(cx.PrefixArgs(), "role", "add", "test-role-cn"), cx.envMap, "Role test-role-cn created"); err != nil {
 		cx.t.Fatal(err)
 	}
 	if err := ctlV3User(cx, []string{"grant-role", "example.com", "test-role-cn"}, "Role test-role-cn is granted to user example.com", nil); err != nil {
@@ -1128,5 +1247,166 @@ func authTestJWTExpire(cx ctlCtx) {
 
 	if err := ctlV3Put(cx, "hoo", "bar", ""); err != nil {
 		cx.t.Error(err)
+	}
+}
+
+func authTestRevisionConsistency(cx ctlCtx) {
+	if err := authEnable(cx); err != nil {
+		cx.t.Fatal(err)
+	}
+	cx.user, cx.pass = "root", "root"
+
+	// add user
+	if err := ctlV3User(cx, []string{"add", "test-user", "--interactive=false"}, "User test-user created", []string{"pass"}); err != nil {
+		cx.t.Fatal(err)
+	}
+	// delete the same user
+	if err := ctlV3User(cx, []string{"delete", "test-user"}, "User test-user deleted", []string{}); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	// get node0 auth revision
+	node0 := cx.epc.Procs[0]
+	endpoint := node0.EndpointsV3()[0]
+	cli, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, Username: cx.user, Password: cx.pass, DialTimeout: 3 * time.Second})
+	if err != nil {
+		cx.t.Fatal(err)
+	}
+	defer cli.Close()
+
+	sresp, err := cli.AuthStatus(context.TODO())
+	if err != nil {
+		cx.t.Fatal(err)
+	}
+	oldAuthRevision := sresp.AuthRevision
+
+	// restart the node
+	node0.WithStopSignal(syscall.SIGINT)
+	if err := node0.Restart(); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	// get node0 auth revision again
+	sresp, err = cli.AuthStatus(context.TODO())
+	if err != nil {
+		cx.t.Fatal(err)
+	}
+	newAuthRevision := sresp.AuthRevision
+
+	// assert AuthRevision equal
+	if newAuthRevision != oldAuthRevision {
+		cx.t.Fatalf("auth revison shouldn't change when restarting etcd, expected: %d, got: %d", oldAuthRevision, newAuthRevision)
+	}
+}
+
+func ctlV3EndpointHealth(cx ctlCtx) error {
+	cmdArgs := append(cx.PrefixArgs(), "endpoint", "health")
+	lines := make([]string, cx.epc.Cfg.ClusterSize)
+	for i := range lines {
+		lines[i] = "is healthy"
+	}
+	return e2e.SpawnWithExpects(cmdArgs, cx.envMap, lines...)
+}
+
+func ctlV3User(cx ctlCtx, args []string, expStr string, stdIn []string) error {
+	cmdArgs := append(cx.PrefixArgs(), "user")
+	cmdArgs = append(cmdArgs, args...)
+
+	proc, err := e2e.SpawnCmd(cmdArgs, cx.envMap)
+	if err != nil {
+		return err
+	}
+	defer proc.Close()
+
+	// Send 'stdIn' strings as input.
+	for _, s := range stdIn {
+		if err = proc.Send(s + "\r"); err != nil {
+			return err
+		}
+	}
+
+	_, err = proc.Expect(expStr)
+	return err
+}
+
+// authTestCacheReload tests the permissions when a member restarts
+func authTestCacheReload(cx ctlCtx) {
+
+	authData := []struct {
+		user string
+		role string
+		pass string
+	}{
+		{
+			user: "root",
+			role: "root",
+			pass: "123",
+		},
+		{
+			user: "user0",
+			role: "role0",
+			pass: "123",
+		},
+	}
+
+	node0 := cx.epc.Procs[0]
+	endpoint := node0.EndpointsV3()[0]
+
+	// create a client
+	c, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 3 * time.Second})
+	if err != nil {
+		cx.t.Fatal(err)
+	}
+	defer c.Close()
+
+	for _, authObj := range authData {
+		// add role
+		if _, err = c.RoleAdd(context.TODO(), authObj.role); err != nil {
+			cx.t.Fatal(err)
+		}
+
+		// add user
+		if _, err = c.UserAdd(context.TODO(), authObj.user, authObj.pass); err != nil {
+			cx.t.Fatal(err)
+		}
+
+		// grant role to user
+		if _, err = c.UserGrantRole(context.TODO(), authObj.user, authObj.role); err != nil {
+			cx.t.Fatal(err)
+		}
+	}
+
+	// role grant permission to role0
+	if _, err = c.RoleGrantPermission(context.TODO(), authData[1].role, "foo", "", clientv3.PermissionType(clientv3.PermReadWrite)); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	// enable auth
+	if _, err = c.AuthEnable(context.TODO()); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	// create another client with ID:Password
+	c2, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, Username: authData[1].user, Password: authData[1].pass, DialTimeout: 3 * time.Second})
+	if err != nil {
+		cx.t.Fatal(err)
+	}
+	defer c2.Close()
+
+	// create foo since that is within the permission set
+	// expectation is to succeed
+	if _, err = c2.Put(context.TODO(), "foo", "bar"); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	// restart the node
+	node0.WithStopSignal(syscall.SIGINT)
+	if err := node0.Restart(); err != nil {
+		cx.t.Fatal(err)
+	}
+
+	// nothing has changed, but it fails without refreshing cache after restart
+	if _, err = c2.Put(context.TODO(), "foo", "bar2"); err != nil {
+		cx.t.Fatal(err)
 	}
 }

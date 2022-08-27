@@ -18,14 +18,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
+	"go.etcd.io/etcd/server/v3/embed"
 
 	"go.uber.org/zap"
 )
@@ -34,7 +34,7 @@ var lg *zap.Logger
 
 func init() {
 	var err error
-	lg, err = zap.NewProduction()
+	lg, err = logutil.CreateDefaultZapLogger(zap.InfoLevel)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,11 @@ func main() {
 		panic("specify either 'addr' or 'download-ver'")
 	}
 	if *debug {
-		lg = zap.NewExample()
+		var err error
+		lg, err = logutil.CreateDefaultZapLogger(zap.DebugLevel)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	ep := *addr
@@ -59,7 +63,7 @@ func main() {
 			ver := *downloadVer
 
 			// download release binary to temporary directory
-			d, err := ioutil.TempDir(os.TempDir(), ver)
+			d, err := os.MkdirTemp(os.TempDir(), ver)
 			if err != nil {
 				panic(err)
 			}
@@ -87,7 +91,7 @@ func main() {
 			rc := make(chan run)
 
 			cs1 := getCommand(bp, "s1", d1, "http://localhost:2379", "http://localhost:2380", cluster)
-			cmd1 := exec.Command("bash", "-c", cs1)
+			cmd1 := exec.Command(cs1[0], cs1[1:]...)
 			go func() {
 				if *debug {
 					cmd1.Stderr = os.Stderr
@@ -101,7 +105,7 @@ func main() {
 				rc <- run{cmd: cmd1}
 			}()
 			cs2 := getCommand(bp, "s2", d2, "http://localhost:22379", "http://localhost:22380", cluster)
-			cmd2 := exec.Command("bash", "-c", cs2)
+			cmd2 := exec.Command(cs2[0], cs2[1:]...)
 			go func() {
 				if *debug {
 					cmd2.Stderr = os.Stderr

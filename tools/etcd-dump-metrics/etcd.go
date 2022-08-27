@@ -17,14 +17,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 
 	"go.uber.org/zap"
 )
@@ -42,10 +41,9 @@ func setupEmbedCfg(cfg *embed.Config, curls, purls, ics []url.URL) {
 	cfg.Logger = "zap"
 	cfg.LogOutputs = []string{"/dev/null"}
 	// []string{"stderr"} to enable server logging
-	cfg.Debug = false
 
 	var err error
-	cfg.Dir, err = ioutil.TempDir(os.TempDir(), fmt.Sprintf("%016X", time.Now().UnixNano()))
+	cfg.Dir, err = os.MkdirTemp(os.TempDir(), fmt.Sprintf("%016X", time.Now().UnixNano()))
 	if err != nil {
 		panic(err)
 	}
@@ -62,12 +60,22 @@ func setupEmbedCfg(cfg *embed.Config, curls, purls, ics []url.URL) {
 	cfg.InitialCluster = cfg.InitialCluster[1:]
 }
 
-func getCommand(exec, name, dir, cURL, pURL, cluster string) string {
-	s := fmt.Sprintf("%s --name %s --data-dir %s --listen-client-urls %s --advertise-client-urls %s ",
-		exec, name, dir, cURL, cURL)
-	s += fmt.Sprintf("--listen-peer-urls %s --initial-advertise-peer-urls %s ", pURL, pURL)
-	s += fmt.Sprintf("--initial-cluster %s ", cluster)
-	return s + "--initial-cluster-token tkn --initial-cluster-state new"
+func getCommand(exec, name, dir, cURL, pURL, cluster string) (args []string) {
+	if !strings.Contains(exec, "etcd") {
+		panic(fmt.Errorf("%q doesn't seem like etcd binary", exec))
+	}
+	return []string{
+		exec,
+		"--name", name,
+		"--data-dir", dir,
+		"--listen-client-urls", cURL,
+		"--advertise-client-urls", cURL,
+		"--listen-peer-urls", pURL,
+		"--initial-advertise-peer-urls", pURL,
+		"--initial-cluster", cluster,
+		"--initial-cluster-token=tkn",
+		"--initial-cluster-state=new",
+	}
 }
 
 func write(ep string) {

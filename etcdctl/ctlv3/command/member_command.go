@@ -21,7 +21,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/pkg/v3/cobrautl"
 )
 
 var (
@@ -118,7 +119,7 @@ func NewMemberPromoteCommand() *cobra.Command {
 // memberAddCommandFunc executes the "member add" command.
 func memberAddCommandFunc(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
-		ExitWithError(ExitBadArgs, errors.New("member name not provided"))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, errors.New("member name not provided"))
 	}
 	if len(args) > 1 {
 		ev := "too many arguments"
@@ -127,12 +128,12 @@ func memberAddCommandFunc(cmd *cobra.Command, args []string) {
 				ev += fmt.Sprintf(`, did you mean --peer-urls=%s`, s)
 			}
 		}
-		ExitWithError(ExitBadArgs, errors.New(ev))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, errors.New(ev))
 	}
 	newMemberName := args[0]
 
 	if len(memberPeerURLs) == 0 {
-		ExitWithError(ExitBadArgs, errors.New("member peer urls not provided"))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, errors.New("member peer urls not provided"))
 	}
 
 	urls := strings.Split(memberPeerURLs, ",")
@@ -149,35 +150,15 @@ func memberAddCommandFunc(cmd *cobra.Command, args []string) {
 	}
 	cancel()
 	if err != nil {
-		ExitWithError(ExitError, err)
+		cobrautl.ExitWithError(cobrautl.ExitError, err)
 	}
 	newID := resp.Member.ID
 
 	display.MemberAdd(*resp)
 
 	if _, ok := (display).(*simplePrinter); ok {
-		ctx, cancel = commandCtx(cmd)
-		listResp, err := cli.MemberList(ctx)
-		// get latest member list; if there's failover new member might have outdated list
-		for {
-			if err != nil {
-				ExitWithError(ExitError, err)
-			}
-			if listResp.Header.MemberId == resp.Header.MemberId {
-				break
-			}
-			// quorum get to sync cluster list
-			gresp, gerr := cli.Get(ctx, "_")
-			if gerr != nil {
-				ExitWithError(ExitError, err)
-			}
-			resp.Header.MemberId = gresp.Header.MemberId
-			listResp, err = cli.MemberList(ctx)
-		}
-		cancel()
-
 		conf := []string{}
-		for _, memb := range listResp.Members {
+		for _, memb := range resp.Members {
 			for _, u := range memb.PeerURLs {
 				n := memb.Name
 				if memb.ID == newID {
@@ -198,19 +179,19 @@ func memberAddCommandFunc(cmd *cobra.Command, args []string) {
 // memberRemoveCommandFunc executes the "member remove" command.
 func memberRemoveCommandFunc(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		ExitWithError(ExitBadArgs, fmt.Errorf("member ID is not provided"))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("member ID is not provided"))
 	}
 
 	id, err := strconv.ParseUint(args[0], 16, 64)
 	if err != nil {
-		ExitWithError(ExitBadArgs, fmt.Errorf("bad member ID arg (%v), expecting ID in Hex", err))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("bad member ID arg (%v), expecting ID in Hex", err))
 	}
 
 	ctx, cancel := commandCtx(cmd)
 	resp, err := mustClientFromCmd(cmd).MemberRemove(ctx, id)
 	cancel()
 	if err != nil {
-		ExitWithError(ExitError, err)
+		cobrautl.ExitWithError(cobrautl.ExitError, err)
 	}
 	display.MemberRemove(id, *resp)
 }
@@ -218,16 +199,16 @@ func memberRemoveCommandFunc(cmd *cobra.Command, args []string) {
 // memberUpdateCommandFunc executes the "member update" command.
 func memberUpdateCommandFunc(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		ExitWithError(ExitBadArgs, fmt.Errorf("member ID is not provided"))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("member ID is not provided"))
 	}
 
 	id, err := strconv.ParseUint(args[0], 16, 64)
 	if err != nil {
-		ExitWithError(ExitBadArgs, fmt.Errorf("bad member ID arg (%v), expecting ID in Hex", err))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("bad member ID arg (%v), expecting ID in Hex", err))
 	}
 
 	if len(memberPeerURLs) == 0 {
-		ExitWithError(ExitBadArgs, fmt.Errorf("member peer urls not provided"))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("member peer urls not provided"))
 	}
 
 	urls := strings.Split(memberPeerURLs, ",")
@@ -236,7 +217,7 @@ func memberUpdateCommandFunc(cmd *cobra.Command, args []string) {
 	resp, err := mustClientFromCmd(cmd).MemberUpdate(ctx, id, urls)
 	cancel()
 	if err != nil {
-		ExitWithError(ExitError, err)
+		cobrautl.ExitWithError(cobrautl.ExitError, err)
 	}
 
 	display.MemberUpdate(id, *resp)
@@ -248,7 +229,7 @@ func memberListCommandFunc(cmd *cobra.Command, args []string) {
 	resp, err := mustClientFromCmd(cmd).MemberList(ctx)
 	cancel()
 	if err != nil {
-		ExitWithError(ExitError, err)
+		cobrautl.ExitWithError(cobrautl.ExitError, err)
 	}
 
 	display.MemberList(*resp)
@@ -257,19 +238,19 @@ func memberListCommandFunc(cmd *cobra.Command, args []string) {
 // memberPromoteCommandFunc executes the "member promote" command.
 func memberPromoteCommandFunc(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
-		ExitWithError(ExitBadArgs, fmt.Errorf("member ID is not provided"))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("member ID is not provided"))
 	}
 
 	id, err := strconv.ParseUint(args[0], 16, 64)
 	if err != nil {
-		ExitWithError(ExitBadArgs, fmt.Errorf("bad member ID arg (%v), expecting ID in Hex", err))
+		cobrautl.ExitWithError(cobrautl.ExitBadArgs, fmt.Errorf("bad member ID arg (%v), expecting ID in Hex", err))
 	}
 
 	ctx, cancel := commandCtx(cmd)
 	resp, err := mustClientFromCmd(cmd).MemberPromote(ctx, id)
 	cancel()
 	if err != nil {
-		ExitWithError(ExitError, err)
+		cobrautl.ExitWithError(cobrautl.ExitError, err)
 	}
 	display.MemberPromote(id, *resp)
 }

@@ -20,9 +20,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"go.etcd.io/etcd/lease"
-	"go.etcd.io/etcd/mvcc"
-	"go.etcd.io/etcd/mvcc/backend"
+	"go.etcd.io/etcd/server/v3/lease"
+	"go.etcd.io/etcd/server/v3/storage/backend"
+	"go.etcd.io/etcd/server/v3/storage/mvcc"
 
 	"github.com/spf13/cobra"
 )
@@ -35,10 +35,10 @@ var (
 )
 
 func initMVCC() {
-	bcfg := backend.DefaultBackendConfig()
+	bcfg := backend.DefaultBackendConfig(zap.NewNop())
 	bcfg.Path, bcfg.BatchInterval, bcfg.BatchLimit = "mvcc-bench", time.Duration(batchInterval)*time.Millisecond, batchLimit
 	be := backend.New(bcfg)
-	s = mvcc.NewStore(zap.NewExample(), be, &lease.FakeLessor{}, nil)
+	s = mvcc.NewStore(zap.NewExample(), be, &lease.FakeLessor{}, mvcc.StoreConfig{})
 	os.Remove("mvcc-bench") // boltDB has an opened fd, so removing the file is ok
 }
 
