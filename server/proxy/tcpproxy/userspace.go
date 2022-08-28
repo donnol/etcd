@@ -115,6 +115,7 @@ func (tp *TCPProxy) Run() error {
 	}
 }
 
+// pick 从多个节点里选择一个，根据权重等信息选择
 func (tp *TCPProxy) pick() *remote {
 	var weighted []*remote
 	var unweighted []*remote
@@ -141,6 +142,7 @@ func (tp *TCPProxy) pick() *remote {
 		}
 	}
 	if weighted != nil {
+		// 没权重的也有小概率被选中 -- 在0~100里选一个数，刚好选到1
 		if len(unweighted) > 0 && rand.Intn(100) == 1 {
 			// In the presence of records containing weights greater
 			// than 0, records with weight 0 should have a very small
@@ -189,23 +191,27 @@ func (tp *TCPProxy) serve(in net.Conn) {
 		if err == nil {
 			break
 		}
+		// 被选中后，就不能再被选中了
 		remote.inactivate()
 		if tp.Logger != nil {
 			tp.Logger.Warn("deactivated endpoint", zap.String("address", remote.addr), zap.Duration("interval", tp.MonitorInterval), zap.Error(err))
 		}
 	}
 
+	// 如果没有endpoint可以工作，直接关闭连接并返回
 	if out == nil {
 		in.Close()
 		return
 	}
 
+	// 有结果时，复制到in，也就是返回给gateway连接
 	go func() {
 		io.Copy(in, out)
 		in.Close()
 		out.Close()
 	}()
 
+	// 将gateway连接的输入转发给实际工具的节点
 	io.Copy(out, in)
 	out.Close()
 	in.Close()
@@ -220,6 +226,7 @@ func (tp *TCPProxy) runMonitor() {
 				if rem.isActive() {
 					continue
 				}
+				// 监听有工作的endpoint，尝试重新激活
 				go func(r *remote) {
 					if err := r.tryReactivate(); err != nil {
 						if tp.Logger != nil {
