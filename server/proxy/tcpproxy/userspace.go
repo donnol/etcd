@@ -185,8 +185,7 @@ func (tp *TCPProxy) serve(in net.Conn) {
 		if remote == nil {
 			break
 		}
-		// TODO: add timeout
-		out, err = net.Dial("tcp", remote.addr)
+		out, err = net.DialTimeout("tcp", remote.addr, 10*time.Second)
 		if err == nil {
 			break
 		}
