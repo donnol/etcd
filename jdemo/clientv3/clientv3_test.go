@@ -71,4 +71,28 @@ func TestClientV3(t *testing.T) {
 		}
 		t.Logf("get resp: %+v", resp)
 	}
+
+	// watch
+	watchCh := client.Watch(ctx, "key")
+	go func() {
+		time.Sleep(time.Second)
+		if err := client.RequestProgress(ctx); err != nil {
+			panic(err)
+		}
+		time.Sleep(1 * time.Second)
+
+		leaseResp, err := client.Grant(ctx, 5)
+		if err != nil {
+			panic(err)
+		}
+		t.Logf("lease resp: %+v", leaseResp)
+
+		putResp, err := client.Put(ctx, "key", "value", clientv3.WithLease(leaseResp.ID))
+		if err != nil {
+			panic(err)
+		}
+		t.Logf("put resp: %+v", putResp)
+	}()
+	v := <-watchCh
+	t.Logf("watch value: %+v", v)
 }
