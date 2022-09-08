@@ -726,6 +726,7 @@ func (r *raft) becomeLeader() {
 	if r.state == StateFollower {
 		panic("invalid transition [follower -> leader]")
 	}
+	// stedLeader用函数，tickHeartbeat又用方法，真奇怪
 	r.step = stepLeader
 	r.reset(r.Term)
 	r.tick = r.tickHeartbeat
