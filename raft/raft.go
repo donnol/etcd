@@ -727,6 +727,7 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	// stedLeader用函数，tickHeartbeat又用方法，真奇怪
+	// 用函数的时候，可以传入任意的*raft；而方法只能使用自身绑定的*raft
 	r.step = stepLeader
 	r.reset(r.Term)
 	r.tick = r.tickHeartbeat
