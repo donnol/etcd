@@ -726,7 +726,7 @@ func (r *raft) becomeLeader() {
 	if r.state == StateFollower {
 		panic("invalid transition [follower -> leader]")
 	}
-	// stedLeader用函数，tickHeartbeat又用方法，真奇怪
+	// stepLeader用函数，tickHeartbeat又用方法，真奇怪
 	// 用函数的时候，可以传入任意的*raft；而方法只能使用自身绑定的*raft
 	r.step = stepLeader
 	r.reset(r.Term)
@@ -851,7 +851,7 @@ func (r *raft) Step(m pb.Message) error {
 	switch {
 	case m.Term == 0:
 		// local message
-	case m.Term > r.Term:
+	case m.Term > r.Term: // 当收到的消息的term比自身的大时，自己可能已经是follower
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
 			inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
